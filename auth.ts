@@ -1,15 +1,28 @@
-import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
-import { getServerSession } from "next-auth";
 import { AUTHOR_BY_GITHUB_ID_QUERY } from "@/sanity/lib/queries";
 import { client } from "@/sanity/lib/client";
 import { writeClient } from "@/sanity/lib/write-client";
+import { NextAuthOptions } from "next-auth";
+import { getServerSession } from "next-auth/next";
 
-export const authOptions = {
-  providers: [GitHub],
+// Define the auth options with providers and callbacks
+export const authOptions: NextAuthOptions = {
+  providers: [
+    GitHub({
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+    }),
+  ],
   callbacks: {
-    async signIn({ user: { name, email, image }, profile: { id, login, bio } }) {
-      const existingUser = await client.withConfig({ useCdn: false }).fetch(AUTHOR_BY_GITHUB_ID_QUERY, { id });
+    async signIn({
+      user: { name, email, image },
+      profile: { id, login, bio },
+    }) {
+      const existingUser = await client
+        .withConfig({ useCdn: false })
+        .fetch(AUTHOR_BY_GITHUB_ID_QUERY, {
+          id,
+        });
 
       if (!existingUser) {
         await writeClient.create({
@@ -27,9 +40,15 @@ export const authOptions = {
     },
     async jwt({ token, account, profile }) {
       if (account && profile) {
-        const user = await client.withConfig({ useCdn: false }).fetch(AUTHOR_BY_GITHUB_ID_QUERY, { id: profile?.id });
+        const user = await client
+          .withConfig({ useCdn: false })
+          .fetch(AUTHOR_BY_GITHUB_ID_QUERY, {
+            id: profile?.id,
+          });
+
         token.id = user?._id;
       }
+
       return token;
     },
     async session({ session, token }) {
@@ -39,6 +58,21 @@ export const authOptions = {
   },
 };
 
-// Export authentication functions
-export const auth = async () => getServerSession(authOptions);
-export const { handlers, signIn, signOut } = NextAuth(authOptions);
+// Now export signIn, signOut, handlers, and auth separately
+import NextAuth from "next-auth";
+
+export const auth = NextAuth;
+export const signIn = NextAuth.signIn;
+export const signOut = NextAuth.signOut;
+export const handlers = NextAuth.handlers;
+
+export const authID = async () => {
+  try {
+    // Fetch the session using getServerSession
+    const session = await getServerSession();
+    return session; // Return the session object
+  } catch (error) {
+    console.error("Error fetching session:", error);
+    throw new Error("Session fetch failed");
+  }
+};
